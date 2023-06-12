@@ -1,0 +1,60 @@
+ultralytics.yolo.engine.results.Results object with attributes:
+
+boxes: ultralytics.yolo.engine.results.Boxes object
+keypoints: ultralytics.yolo.engine.results.Keypoints object
+keys: ['boxes', 'keypoints']
+masks: None
+names: {0: 'person'}
+orig_img: array([[[0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0],
+        ...,
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0]],
+
+       [[0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0],
+        ...,
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0]],
+
+       [[0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0],
+        ...,
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0]],
+
+       ...,
+
+       [[0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0],
+        ...,
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0]],
+
+       [[0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0],
+        ...,
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0]],
+
+       [[0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0],
+        ...,
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0]]], dtype=uint8)
+orig_shape: (1080, 1920)
+path: 'image0.jpg'
+probs: None
+speed: {'preprocess': 2.7780532836914062, 'inference': 72.84283638000488, 'postprocess': 0.3199577331542969}
