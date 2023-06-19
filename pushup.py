@@ -33,7 +33,6 @@ keypoint_names = [
 
 ####################
 # Functions
-
 def linear_regression(keypoint_name_list):
     ############################
     # This function takes the list of L/R body part dictionaries and finds the linear regression for the data
@@ -50,9 +49,7 @@ def linear_regression(keypoint_name_list):
         x_data.append(keypoint["x"])
         y_data.append(keypoint["y"])
 
-    # Linear Regression
     N = len(x_data)
-
     sum_x = sum(x_data)
     sum_y = sum(y_data)
     sum_xy = sum(x*y for x, y in zip(x_data, y_data))
@@ -62,13 +59,22 @@ def linear_regression(keypoint_name_list):
     # Calculate slope
     slope = (N * sum_xy - sum_x * sum_y) / (N * sum_xx - sum_x**2)
 
+    # Calculate the intercept
+    intercept = (sum_y - slope * sum_x) / N
+
     # Calculate R-squared value
     numerator = (N * sum_xy - sum_x * sum_y)**2
     denominator = (N * sum_xx - sum_x**2) * (N * sum_yy - sum_y**2)
-    r_squared = numerator / denominator
+    
+    # Check for division by zero
+    if denominator == 0:
+        print("R-squared cannot be calculated because the variance of y is 0")
+        r_squared = None
 
-    return slope, r_squared
+    else:
+        r_squared = numerator / denominator
 
+    return slope, intercept , r_squared
 
 
 # Open the webcam
@@ -101,46 +107,55 @@ while cap.isOpened():
                 
                 keypoint_name_list = [keypoint_dict["right_shoulder"], keypoint_dict["right_hip"], keypoint_dict["right_knee"], keypoint_dict["right_ankle"]]
 
-            
-            
-                
-
+                m, b, r_sq = linear_regression(keypoint_name_list)
 
 
             elif "left_shoulder" in keypoint_dict and "left_hip" in keypoint_dict and "left_knee" in keypoint_dict and "left_ankle" in keypoint_dict:
 
+                keypoint_name_list = [keypoint_dict["left_shoulder"], keypoint_dict["left_hip"], keypoint_dict["left_knee"], keypoint_dict["left_ankle"]]
 
-            # # Check if right_wrist and right_elbow keypoints exist
-            # if "right_wrist" in keypoint_dict and "right_elbow" in keypoint_dict:
-            #     # If wrist is above the elbow and to its left
-            #     if (
-            #         keypoint_dict["right_wrist"]["y"]
-            #         < keypoint_dict["right_elbow"]["y"]
-            #         and keypoint_dict["right_wrist"]["x"]
-            #         < keypoint_dict["right_elbow"]["x"]
-            #     ):
-            #         is_rep = True
-            #     # Rep ends when wrist goes down past the elbow
-            #     elif (
-            #         is_rep
-            #         and keypoint_dict["right_wrist"]["y"]
-            #         > keypoint_dict["right_elbow"]["y"]
-            #     ):
-            #         is_rep = False
-            #         rep_counter += 1
+                m, b, r_sq = linear_regression(keypoint_name_list)
+            
+            else:
+                print("Keypoints not found")
+                m = 0
+                b = 0
+                r_sq = None
 
+           
             # Annotate the frame with the rep count
             pose_annotated_frame = person.plot()
+            
+            # Calculate the center point of the frame
+            height, width, _ = frame.shape
+            center_height = height // 2
+            center_width = width // 2
+
+            # Calculate the start and end points for the line
+            start_point = (center_width - 100, int(center_height - 100 * m))
+            end_point = (center_width + 100, int(center_height + 100 * m))
+
+            # Display the line
+            cv2.line(pose_annotated_frame, start_point, end_point, (0, 0, 255), 5)
+
+            # Display the text
+            text = "Back Straightness: {}".format(r_sq)
+            text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
+            text_x = center_width - text_size[0] // 2
+            text_y = center_height - text_size[1] // 2
             cv2.putText(
                 pose_annotated_frame,
-                "Reps: {}".format(rep_counter),
-                (300, 400),
+                text,
+                (text_x, text_y),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                3,
+                1,
                 (0, 0, 0),
-                5,
+                2,
                 cv2.LINE_AA,
             )
+            # Expand the image to fit the screen
+            pose_annotated_frame = cv2.resize(pose_annotated_frame, (1000, 800))
+
             cv2.imshow("Pose Detection", pose_annotated_frame)
 
         if cv2.waitKey(1) & 0xFF == ord("q"):
