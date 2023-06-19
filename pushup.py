@@ -1,4 +1,4 @@
-# Jake 
+# Jake and Krish
 # 6-16-2023
 # The purpose of this program is to count the number of pushups as well as correct user form.
 
@@ -80,8 +80,6 @@ def linear_regression(keypoint_name_list):
 # Open the webcam
 cap = cv2.VideoCapture(0)
 
-rep_counter = 0
-is_rep = False
 
 while cap.isOpened():
     success, frame = cap.read()
@@ -139,41 +137,74 @@ while cap.isOpened():
             center_height = height // 2
             center_width = width // 2
 
+#############################
+# Feature : Need to find the start/mid/end ( find a robust way to solve this problem will save us a lot of time )
 
-           # Display the line of best fit over the correct side of body 
-            if side == "right":
-                # find the line endpoints at the shoulder and ankle
-                x1 = keypoint_dict["right_shoulder"]["x"]
-                y1 = keypoint_dict["right_shoulder"]["y"]
-                x2 = keypoint_dict["right_ankle"]["x"]
-                y2 = keypoint_dict["right_ankle"]["y"]
+# Possilbe solution 1: Angle measures for the arms
+#
+# Limitations: 
+# need to keep track of extra limbs
 
-                # Draw the line of best fit over the right side of the body
-                cv2.line(
-                    pose_annotated_frame,
-                    (x1, y1),
-                    (x2, y2),
-                    (0, 0, 255),
-                    2)
+
+# Possilbe solution 2: Derivative of the linear regression line slope (m)
+# 
+# Research: numerical forward difference method of taking the derivative
+#
+# Limitations: 
+# need to keep track of time
+# issue with frame rate sampleing
+# computationally expensive
+
+
+#############################
+# Feature : Improvement sugesstions
+#
+# Find residual for each point against the linear regression line, check if outlier, print advice 
+
+
+#############################
+# Feature : Rep counting
+# 
+# A 'score' that tells you how many good reps vs total reps
+
+
+
+#############################
+# Bad Code points not corrects
+        #    # Display the line of best fit over the correct side of body 
+        #     if side == "right":
+        #         # find the line endpoints at the shoulder and ankle
+        #         x1 = keypoint_dict["right_shoulder"]["x"]
+        #         y1 = keypoint_dict["right_shoulder"]["y"]
+        #         x2 = keypoint_dict["right_ankle"]["x"]
+        #         y2 = keypoint_dict["right_ankle"]["y"]
+
+        #         # Draw the line of best fit over the right side of the body
+        #         cv2.line(
+        #             pose_annotated_frame,
+        #             (x1, y1),
+        #             (x2, y2),
+        #             (0, 0, 255),
+        #             2)
                 
-            if side == "left":
-                # find the line endpoints at the shoulder and ankle
-                x1 = keypoint_dict["left_shoulder"]["x"]
-                y1 = keypoint_dict["left_shoulder"]["y"]
-                x2 = keypoint_dict["left_ankle"]["x"]
-                y2 = keypoint_dict["left_ankle"]["y"]
+        #     if side == "left":
+        #         # find the line endpoints at the shoulder and ankle
+        #         x1 = keypoint_dict["left_shoulder"]["x"]
+        #         y1 = keypoint_dict["left_shoulder"]["y"]
+        #         x2 = keypoint_dict["left_ankle"]["x"]
+        #         y2 = keypoint_dict["left_ankle"]["y"]
 
-                # Draw the line of best fit over the left side of the body
-                cv2.line(
-                    pose_annotated_frame,
-                    (x1, y1),
-                    (x2, y2),
-                    (0, 0, 255),
-                    2)
+        #         # Draw the line of best fit over the left side of the body
+        #         cv2.line(
+        #             pose_annotated_frame,
+        #             (x1, y1),
+        #             (x2, y2),
+        #             (0, 0, 255),
+        #             2)
                 
             
             # Display the text
-            text = "Back Straightness: {}".format(r_sq)
+            text = "Back Straightness: {}".format(round(r_sq,3))
             text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
             text_x = center_width - text_size[0] // 2
             text_y = center_height - text_size[1] // 2
