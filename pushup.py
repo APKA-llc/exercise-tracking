@@ -78,7 +78,7 @@ def linear_regression(keypoint_name_list):
 
 
 # Open the webcam
-cap = cv2.VideoCapture(1)
+cap = cv2.VideoCapture(0)
 
 rep_counter = 0
 is_rep = False
@@ -109,12 +109,20 @@ while cap.isOpened():
 
                 m, b, r_sq = linear_regression(keypoint_name_list)
 
+                side = "right"
+
+                print("Right side found")
+
 
             elif "left_shoulder" in keypoint_dict and "left_hip" in keypoint_dict and "left_knee" in keypoint_dict and "left_ankle" in keypoint_dict:
 
                 keypoint_name_list = [keypoint_dict["left_shoulder"], keypoint_dict["left_hip"], keypoint_dict["left_knee"], keypoint_dict["left_ankle"]]
 
                 m, b, r_sq = linear_regression(keypoint_name_list)
+
+                side = "left"
+                
+                print("Left side found")
             
             else:
                 print("Keypoints not found")
@@ -131,13 +139,39 @@ while cap.isOpened():
             center_height = height // 2
             center_width = width // 2
 
-            # Calculate the start and end points for the line
-            start_point = (center_width - 100, int(center_height - 100 * m))
-            end_point = (center_width + 100, int(center_height + 100 * m))
 
-            # Display the line
-            cv2.line(pose_annotated_frame, start_point, end_point, (0, 0, 255), 5)
+           # Display the line of best fit over the correct side of body 
+            if side == "right":
+                # find the line endpoints at the shoulder and ankle
+                x1 = keypoint_dict["right_shoulder"]["x"]
+                y1 = keypoint_dict["right_shoulder"]["y"]
+                x2 = keypoint_dict["right_ankle"]["x"]
+                y2 = keypoint_dict["right_ankle"]["y"]
 
+                # Draw the line of best fit over the right side of the body
+                cv2.line(
+                    pose_annotated_frame,
+                    (x1, y1),
+                    (x2, y2),
+                    (0, 0, 255),
+                    2)
+                
+            if side == "left":
+                # find the line endpoints at the shoulder and ankle
+                x1 = keypoint_dict["left_shoulder"]["x"]
+                y1 = keypoint_dict["left_shoulder"]["y"]
+                x2 = keypoint_dict["left_ankle"]["x"]
+                y2 = keypoint_dict["left_ankle"]["y"]
+
+                # Draw the line of best fit over the left side of the body
+                cv2.line(
+                    pose_annotated_frame,
+                    (x1, y1),
+                    (x2, y2),
+                    (0, 0, 255),
+                    2)
+                
+            
             # Display the text
             text = "Back Straightness: {}".format(r_sq)
             text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
