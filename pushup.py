@@ -2,8 +2,6 @@
 # 6-16-2023
 # The purpose of this program is to count the number of pushups as well as correct user form.
 
-#DEV NOTES
-# Fixed the line of best fit m and r_sq display crashing issue
 
 #############################
 # Feature : Need to find the start/mid/end ( find a robust way to solve this problem will save us a lot of time )
@@ -32,7 +30,7 @@
 
 #############################
 # Feature : Rep counting
-# 
+#  needs a slope 'filter' to only look at a range of slopes for when you are standing , vs when you are doing a pushup
 # A 'score' that tells you how many good reps vs total reps
 
 
@@ -53,8 +51,11 @@ m = None
 b = None
 r_sq = None
 
-slope_dict = {}
+rep_count = 0
 frame_count = 0
+
+slope_dict = {}
+slope_prime_dict = {}
 
 # Keypoint names
 keypoint_names = [
@@ -121,6 +122,25 @@ def linear_regression(keypoint_name_list):
 
     return slope, intercept , r_squared
 
+def backwards_difference(current_frame, dictionary_name):
+    ############################
+    # This function uses the current slope and the last available slope from n th frame back to calculate the derivative at the current frame
+    # Input: frame count, y value
+    # Output: write to slope_prime_dict with the derivative ate current frame count
+    
+    # Step size between current frame and last frame with a slope
+    past_frame = current_frame -1
+    while dictionary_name[past_frame] == np.nan:
+        past_frame -= 1
+
+    h = current_frame - past_frame
+
+    # Backwards difference method formula
+    m_prime = (dictionary_name[current_frame] - dictionary_name[past_frame] ) / h
+
+    # Write m_prime to slope_prime_dict
+    slope_prime_dict[current_frame] = m_prime
+
 
 # Open the webcam
 cap = cv2.VideoCapture(0)
@@ -147,11 +167,12 @@ while cap.isOpened():
                 }
            
         # Check if all of the shoulder, hip, knee, and ankle keypoints can be seen and have a high probability
-        probability_threshold = 0.3
+        probability_threshold = 0.5
         required_keypoints_right = [ "right_hip", "right_shoulder", "right_knee", "right_ankle"] #Included here for distinction R vs L
         missing_keypoints = [] # Initialize / clear the list
 
-        # Dev Notes: the search for all the valid keypoints "right side" seems to be working correctly
+        
+        # Dev Notes -> Need to add in 'Left' side of points
         for keypoint in required_keypoints_right:
             # Check to make sure the keypoint exists and has a high probability
             if keypoint not in keypoint_dict or keypoint_dict[keypoint]["probability"] < probability_threshold:
@@ -163,20 +184,25 @@ while cap.isOpened():
             # No m value found for this frame
             null = np.nan
             slope_dict[frame_count] = null 
+            slope_prime_dict[frame_count] = null
         
-        #Dev Notes: Program crashes when it tries to run the lin reg 
         else:
             m, b, r_sq =linear_regression(required_keypoints_right)
+
+            sig_fig = 5 # Set a sig fig value for the print statements to reduce size
+            m = round(m, sig_fig)
+            b = round(b, sig_fig)
+            r_sq = round(r_sq, sig_fig)
 
             # Add slope value at fame count to dictionary
             slope_dict[frame_count] = m
 
-            # sig_fig = 4 # Set a sig fig value for the print statements to reduce size
-            # m = round(m, sig_fig)
-            # b = round(b, sig_fig)
-            # r_sq = round(r_sq, sig_fig)
+            # Calculate the derivative at the current frame
+            backwards_difference(frame_count, slope_dict)
 
-            # print(f"m: {m}, b: {b}, r_sq: {r_sq}")
+            print(f"m: {m}, b: {b}, r_sq: {r_sq}")
+
+
 
 
         ############################
@@ -221,6 +247,22 @@ while cap.isOpened():
             cv2.LINE_AA,
         )
 
+        # Display the slop of the back line (m)
+        text = "Rep Counter: {}".format(rep_count)
+        text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
+        text_x = (center_width - text_size[0] // 2)
+        text_y = (center_height - text_size[1] // 2) - 60
+        cv2.putText(
+            pose_annotated_frame,
+            text,
+            (text_x, text_y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (0, 0, 225),
+            3,
+            cv2.LINE_AA,
+        )
+
         # Display the line of best fit over the image of the body and keypoints (y = mx + b)
         if m is not None and b is not None:
             if r_sq > 0.7:
@@ -240,6 +282,7 @@ while cap.isOpened():
                     2,
                 )
 
+        
         # Expand the image to fit the screen
         pose_annotated_frame = cv2.resize(pose_annotated_frame, (1000, 800))
 
@@ -264,13 +307,14 @@ cv2.destroyAllWindows()
 
 # After the loop, you have a dictionary of {frame: value} pairs that you can plot
 frame, slope = zip(*slope_dict.items())
+frame, slope_prime = zip(*slope_prime_dict.items())
 
-# Plot the data
-plt.plot(frame, abs(slope))
+# Plot both the values of the slope and its derivative in differnet colors
+plt.plot(frame, slope, color="blue")
+plt.plot(frame, slope_prime, color="red")
 
 plt.xlabel("Frame (n)")
-plt.ylabel("Slope")
-plt.title("Angle of the back over each frame")
+plt.title("Slope = Blue , Slope Derivative = Red")
 
 # Set x,y axis limits
 plt.xlim(0, frame_count)
