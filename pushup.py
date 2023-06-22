@@ -2,13 +2,55 @@
 # 6-16-2023
 # The purpose of this program is to count the number of pushups as well as correct user form.
 
-# Inport libraries
+#DEV NOTES
+# Fixed the line of best fit m and r_sq display crashing issue
+
+#############################
+# Feature : Need to find the start/mid/end ( find a robust way to solve this problem will save us a lot of time )
+
+# Possilbe solution 1: Angle measures for the arms
+#
+# Limitations: 
+# need to keep track of extra limbs
+
+
+# Possilbe solution 2: Derivative of the linear regression line slope (m)
+# 
+# Research: numerical forward difference method of taking the derivative
+#
+# Limitations: 
+# need to keep track of time
+# issue with frame rate sampleing
+# computationally expensive
+
+
+#############################
+# Feature : Improvement sugesstions
+#
+# Find residual for each point against the linear regression line, check if outlier, print advice 
+
+
+#############################
+# Feature : Rep counting
+# 
+# A 'score' that tells you how many good reps vs total reps
+
+
+#############################
+# Import libraries
 import cv2
 from ultralytics import YOLO
 import numpy as np
 
 # Load Model
 pose_model = YOLO("yolov8s-pose.pt")
+
+
+####################
+# Initialize
+m = None
+b = None
+r_sq = None
 
 # Keypoint names
 keypoint_names = [
@@ -30,7 +72,6 @@ keypoint_names = [
     "left_ankle",
     "right_ankle",
 ]
-
 ####################
 # Functions
 def linear_regression(keypoint_name_list):
@@ -46,8 +87,8 @@ def linear_regression(keypoint_name_list):
 
     # Extract x,y coordinates from keypoint dictionaries 
     for keypoint in keypoint_name_list:
-        x_data.append(keypoint["x"])
-        y_data.append(keypoint["y"])
+        x_data.append(keypoint_dict[keypoint]["x"])
+        y_data.append(keypoint_dict[keypoint]["y"])
 
     N = len(x_data)
     sum_x = sum(x_data)
@@ -99,130 +140,101 @@ while cap.isOpened():
                     "y": y.item(),
                     "probability": probability.item(),
                 }
-
-            # Check if shoulder, hip, knee, and ankle keypoints exist
-            if "right_shoulder" in keypoint_dict and "right_hip" in keypoint_dict and "right_knee" in keypoint_dict and "right_ankle" in keypoint_dict:
-                
-                keypoint_name_list = [keypoint_dict["right_shoulder"], keypoint_dict["right_hip"], keypoint_dict["right_knee"], keypoint_dict["right_ankle"]]
-
-                m, b, r_sq = linear_regression(keypoint_name_list)
-
-                side = "right"
-
-                print("Right side found")
-
-
-            elif "left_shoulder" in keypoint_dict and "left_hip" in keypoint_dict and "left_knee" in keypoint_dict and "left_ankle" in keypoint_dict:
-
-                keypoint_name_list = [keypoint_dict["left_shoulder"], keypoint_dict["left_hip"], keypoint_dict["left_knee"], keypoint_dict["left_ankle"]]
-
-                m, b, r_sq = linear_regression(keypoint_name_list)
-
-                side = "left"
-                
-                print("Left side found")
-            
-            else:
-                print("Keypoints not found")
-                m = 0
-                b = 0
-                r_sq = None
-
            
-            # Annotate the frame with the rep count
-            pose_annotated_frame = person.plot()
+        # Check if all of the shoulder, hip, knee, and ankle keypoints can be seen and have a high probability
+        probability_threshold = 0.3
+        required_keypoints = [ "right_hip", "right_shoulder", "right_knee", "right_ankle"]
+        missing_keypoints = []
+
+        # Dev Notes: the search for all the valid keypoints "right side" seems to be working correctly
+        for keypoint in required_keypoints:
+            # Check to make sure the keypoint exists and has a high probability
+            if keypoint not in keypoint_dict or keypoint_dict[keypoint]["probability"] < probability_threshold:
+                missing_keypoints.append(keypoint)
+
+        if missing_keypoints != []:
+            print(f"Not all keypoints are visible: {missing_keypoints}") #Debug statement
+        
+        #Dev Notes: Program crashes when it tries to run the lin reg 
+        else:
+            m, b, r_sq =linear_regression(required_keypoints)
             
-            # Calculate the center point of the frame
-            height, width, _ = frame.shape
-            center_height = height // 2
-            center_width = width // 2
+            sig_fig = 3
+            m = round(m, sig_fig)
+            b = round(b, sig_fig)
+            r_sq = round(r_sq, sig_fig)
 
-#############################
-# Feature : Need to find the start/mid/end ( find a robust way to solve this problem will save us a lot of time )
-
-# Possilbe solution 1: Angle measures for the arms
-#
-# Limitations: 
-# need to keep track of extra limbs
+            print(f"m: {m}, b: {b}, r_sq: {r_sq}")
 
 
-# Possilbe solution 2: Derivative of the linear regression line slope (m)
-# 
-# Research: numerical forward difference method of taking the derivative
-#
-# Limitations: 
-# need to keep track of time
-# issue with frame rate sampleing
-# computationally expensive
+        ############################
+        # Display Settings
 
+        # Calculate the center point of the frame
+        height, width, _ = frame.shape
+        center_height = height // 2
+        center_width = width // 2
 
-#############################
-# Feature : Improvement sugesstions
-#
-# Find residual for each point against the linear regression line, check if outlier, print advice 
+        pose_annotated_frame = person.plot()
+           
+        # Display the adherance to the line (r_sq)
+        text = "Back Straightness: {}".format(r_sq) 
+        text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
+        text_x = center_width - text_size[0] // 2
+        text_y = center_height - text_size[1] // 2
+        cv2.putText(
+            pose_annotated_frame,
+            text,
+            (text_x, text_y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (0, 0, 0),
+            2,
+            cv2.LINE_AA,
+        )
 
+        # Display the slop of the back line (m)
+        text = "Back Angle: {}".format(m)
+        text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
+        text_x = (center_width - text_size[0] // 2)
+        text_y = (center_height - text_size[1] // 2) - 30
+        cv2.putText(
+            pose_annotated_frame,
+            text,
+            (text_x, text_y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (0, 0, 0),
+            2,
+            cv2.LINE_AA,
+        )
 
-#############################
-# Feature : Rep counting
-# 
-# A 'score' that tells you how many good reps vs total reps
+        # Display the line of best fit over the image of the body and keypoints (y = mx + b)
+        if m is not None and b is not None:
+            if r_sq > 0.7:
+                cv2.line(
+                    pose_annotated_frame,
+                    (0, int(b)),
+                    (width, int(m * width + b)),
+                    (0, 192, 0),
+                    2,
+                )
+            else:
+                cv2.line(
+                    pose_annotated_frame,
+                    (0, int(b)),
+                    (width, int(m * width + b)),
+                    (0, 0, 255),
+                    2,
+                )
 
+        # Expand the image to fit the screen
+        pose_annotated_frame = cv2.resize(pose_annotated_frame, (1000, 800))
 
+        # Display the frame
+        cv2.imshow("Pose Detection", pose_annotated_frame)
 
-#############################
-# Bad Code points not corrects
-        #    # Display the line of best fit over the correct side of body 
-        #     if side == "right":
-        #         # find the line endpoints at the shoulder and ankle
-        #         x1 = keypoint_dict["right_shoulder"]["x"]
-        #         y1 = keypoint_dict["right_shoulder"]["y"]
-        #         x2 = keypoint_dict["right_ankle"]["x"]
-        #         y2 = keypoint_dict["right_ankle"]["y"]
-
-        #         # Draw the line of best fit over the right side of the body
-        #         cv2.line(
-        #             pose_annotated_frame,
-        #             (x1, y1),
-        #             (x2, y2),
-        #             (0, 0, 255),
-        #             2)
-                
-        #     if side == "left":
-        #         # find the line endpoints at the shoulder and ankle
-        #         x1 = keypoint_dict["left_shoulder"]["x"]
-        #         y1 = keypoint_dict["left_shoulder"]["y"]
-        #         x2 = keypoint_dict["left_ankle"]["x"]
-        #         y2 = keypoint_dict["left_ankle"]["y"]
-
-        #         # Draw the line of best fit over the left side of the body
-        #         cv2.line(
-        #             pose_annotated_frame,
-        #             (x1, y1),
-        #             (x2, y2),
-        #             (0, 0, 255),
-        #             2)
-                
-            
-            # Display the text
-            text = "Back Straightness: {}".format(round(r_sq,3))
-            text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
-            text_x = center_width - text_size[0] // 2
-            text_y = center_height - text_size[1] // 2
-            cv2.putText(
-                pose_annotated_frame,
-                text,
-                (text_x, text_y),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                1,
-                (0, 0, 0),
-                2,
-                cv2.LINE_AA,
-            )
-            # Expand the image to fit the screen
-            pose_annotated_frame = cv2.resize(pose_annotated_frame, (1000, 800))
-
-            cv2.imshow("Pose Detection", pose_annotated_frame)
-
+        # Press "q" to quit
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
     else:
