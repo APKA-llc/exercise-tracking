@@ -41,6 +41,7 @@
 import cv2
 from ultralytics import YOLO
 import numpy as np
+import matplotlib.pyplot as plt
 
 # Load Model
 pose_model = YOLO("yolov8s-pose.pt")
@@ -51,6 +52,9 @@ pose_model = YOLO("yolov8s-pose.pt")
 m = None
 b = None
 r_sq = None
+
+slope_dict = {}
+frame_count = 0
 
 # Keypoint names
 keypoint_names = [
@@ -123,6 +127,7 @@ cap = cv2.VideoCapture(0)
 
 
 while cap.isOpened():
+    frame_count += 1
     success, frame = cap.read()
 
     if success:
@@ -143,28 +148,35 @@ while cap.isOpened():
            
         # Check if all of the shoulder, hip, knee, and ankle keypoints can be seen and have a high probability
         probability_threshold = 0.3
-        required_keypoints = [ "right_hip", "right_shoulder", "right_knee", "right_ankle"]
-        missing_keypoints = []
+        required_keypoints_right = [ "right_hip", "right_shoulder", "right_knee", "right_ankle"] #Included here for distinction R vs L
+        missing_keypoints = [] # Initialize / clear the list
 
         # Dev Notes: the search for all the valid keypoints "right side" seems to be working correctly
-        for keypoint in required_keypoints:
+        for keypoint in required_keypoints_right:
             # Check to make sure the keypoint exists and has a high probability
             if keypoint not in keypoint_dict or keypoint_dict[keypoint]["probability"] < probability_threshold:
                 missing_keypoints.append(keypoint)
 
         if missing_keypoints != []:
             print(f"Not all keypoints are visible: {missing_keypoints}") #Debug statement
+            
+            # No m value found for this frame
+            null = np.nan
+            slope_dict[frame_count] = null 
         
         #Dev Notes: Program crashes when it tries to run the lin reg 
         else:
-            m, b, r_sq =linear_regression(required_keypoints)
-            
-            sig_fig = 3
-            m = round(m, sig_fig)
-            b = round(b, sig_fig)
-            r_sq = round(r_sq, sig_fig)
+            m, b, r_sq =linear_regression(required_keypoints_right)
 
-            print(f"m: {m}, b: {b}, r_sq: {r_sq}")
+            # Add slope value at fame count to dictionary
+            slope_dict[frame_count] = m
+
+            # sig_fig = 4 # Set a sig fig value for the print statements to reduce size
+            # m = round(m, sig_fig)
+            # b = round(b, sig_fig)
+            # r_sq = round(r_sq, sig_fig)
+
+            # print(f"m: {m}, b: {b}, r_sq: {r_sq}")
 
 
         ############################
@@ -237,8 +249,35 @@ while cap.isOpened():
         # Press "q" to quit
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
+    
     else:
         break
 
+    
+
+# Release the webcam
 cap.release()
+# Close all windows
 cv2.destroyAllWindows()
+
+
+
+# After the loop, you have a dictionary of {frame: value} pairs that you can plot
+frame, slope = zip(*slope_dict.items())
+
+# Plot the data
+plt.plot(frame, abs(slope))
+
+plt.xlabel("Frame (n)")
+plt.ylabel("Slope")
+plt.title("Angle of the back over each frame")
+
+# Set x,y axis limits
+plt.xlim(0, frame_count)
+# plt.ylim(-5, 5)
+
+plt.show()
+
+
+
+
