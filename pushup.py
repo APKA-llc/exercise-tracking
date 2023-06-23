@@ -56,6 +56,7 @@ frame_count = 0
 
 slope_dict = {}
 slope_prime_dict = {}
+slope_double_prime_dict = {}
 
 # Keypoint names
 keypoint_names = [
@@ -132,15 +133,10 @@ def backwards_difference(current_frame, dictionary_name):
     past_frame = current_frame -1
     while dictionary_name[past_frame] == np.nan:
         past_frame -= 1
-
     h = current_frame - past_frame
-
     # Backwards difference method formula
     m_prime = (dictionary_name[current_frame] - dictionary_name[past_frame] ) / h
-
-    # Write m_prime to slope_prime_dict
-    slope_prime_dict[current_frame] = m_prime
-
+    return m_prime
 
 # Open the webcam
 cap = cv2.VideoCapture(0)
@@ -167,7 +163,7 @@ while cap.isOpened():
                 }
            
         # Check if all of the shoulder, hip, knee, and ankle keypoints can be seen and have a high probability
-        probability_threshold = 0.5
+        probability_threshold = 0.3
         required_keypoints_right = [ "right_hip", "right_shoulder", "right_knee", "right_ankle"] #Included here for distinction R vs L
         missing_keypoints = [] # Initialize / clear the list
 
@@ -185,6 +181,7 @@ while cap.isOpened():
             null = np.nan
             slope_dict[frame_count] = null 
             slope_prime_dict[frame_count] = null
+            slope_double_prime_dict[frame_count] = null
         
         else:
             m, b, r_sq =linear_regression(required_keypoints_right)
@@ -197,8 +194,11 @@ while cap.isOpened():
             # Add slope value at fame count to dictionary
             slope_dict[frame_count] = m
 
-            # Calculate the derivative at the current frame
-            backwards_difference(frame_count, slope_dict)
+            # Calculate the derivative at the current frame Write to slope_prime_dict
+            slope_prime_dict[frame_count] = backwards_difference(frame_count, slope_dict)
+
+            # Calculate the second derivative at the current frame 
+            slope_double_prime_dict[frame_count] = backwards_difference(frame_count, slope_prime_dict)
 
             print(f"m: {m}, b: {b}, r_sq: {r_sq}")
 
@@ -265,7 +265,7 @@ while cap.isOpened():
 
         # Display the line of best fit over the image of the body and keypoints (y = mx + b)
         if m is not None and b is not None:
-            if r_sq > 0.7:
+            if r_sq > 0.8:
                 cv2.line(
                     pose_annotated_frame,
                     (0, int(b)),
@@ -308,17 +308,18 @@ cv2.destroyAllWindows()
 # After the loop, you have a dictionary of {frame: value} pairs that you can plot
 frame, slope = zip(*slope_dict.items())
 frame, slope_prime = zip(*slope_prime_dict.items())
+frame, slope_double_prime = zip(*slope_double_prime_dict.items())
 
 # Plot both the values of the slope and its derivative in differnet colors
 plt.plot(frame, slope, color="blue")
 plt.plot(frame, slope_prime, color="red")
+plt.plot(frame, slope_double_prime, color="green")
 
 plt.xlabel("Frame (n)")
-plt.title("Slope = Blue , Slope Derivative = Red")
+plt.title("m Blue, m' Red, m'' Green")
 
-# Set x,y axis limits
-plt.xlim(0, frame_count)
-# plt.ylim(-5, 5)
+# Display a line at 0 for reference
+plt.axhline(y=0, color="black", linestyle="--")
 
 plt.show()
 
