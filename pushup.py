@@ -184,27 +184,52 @@ while cap.isOpened():
             slope_double_prime_dict[frame_count] = null
         
         else:
-            m, b, r_sq =linear_regression(required_keypoints_right)
+            m, b, r_sq = linear_regression(required_keypoints_right)
 
             sig_fig = 5 # Set a sig fig value for the print statements to reduce size
             m = round(m, sig_fig)
             b = round(b, sig_fig)
             r_sq = round(r_sq, sig_fig)
 
-            # Add slope value at fame count to dictionary
-            slope_dict[frame_count] = m
+            # Add a filter to remove slope outliers such as standing, sitting, etc.
+            slope_tolerance = 0.3
+            if m < slope_tolerance and m > -slope_tolerance:
+                # Add slope value at fame count to dictionary
+                slope_dict[frame_count] = m
 
-            # Calculate the derivative at the current frame Write to slope_prime_dict
-            slope_prime_dict[frame_count] = backwards_difference(frame_count, slope_dict)
+                # Calculate the derivative at the current frame Write to slope_prime_dict
+                slope_prime_dict[frame_count] = backwards_difference(frame_count, slope_dict)
 
-            # Calculate the second derivative at the current frame 
-            slope_double_prime_dict[frame_count] = backwards_difference(frame_count, slope_prime_dict)
+                # Calculate the second derivative at the current frame 
+                slope_double_prime_dict[frame_count] = backwards_difference(frame_count, slope_prime_dict)
 
-            print(f"m: {m}, b: {b}, r_sq: {r_sq}")
+                print(f"m: {m}, b: {b}, r_sq: {r_sq}")
+            
+            else:
+                # No m value found for this frame
+                null = np.nan
+                slope_dict[frame_count] = null
+                slope_prime_dict[frame_count] = null
+                slope_double_prime_dict[frame_count] = null
 
 
+        ############################
+        #Implementation of k-states
+
+        state_tolerance = 0.1
+        state = 'down' # state can be 'down' or 'up'
+        
+        # Check if the slope is within the tolerance
+        if slope_double_prime_dict[frame_count] <= state_tolerance:
+            if slope_double_prime_dict[frame_count] >= -state_tolerance:
+                rep_count += 1
+                if state == 'down':
+                    state = 'up'
+                if state == 'up':
+                    state = 'down'
 
 
+    
         ############################
         # Display Settings
 
@@ -282,6 +307,11 @@ while cap.isOpened():
                     2,
                 )
 
+        # If the state is 'up' then tint the image blue
+        if state == 'up':
+            pose_annotated_frame = cv2.applyColorMap(pose_annotated_frame, cv2.COLORMAP_WINTER)
+            
+        
         
         # Expand the image to fit the screen
         pose_annotated_frame = cv2.resize(pose_annotated_frame, (1000, 800))
