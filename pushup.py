@@ -47,9 +47,10 @@ pose_model = YOLO("yolov8s-pose.pt")
 
 ####################
 # Initialize
-m = None
-b = None
-r_sq = None
+m_plot=0
+m = 0
+b = 0
+r_sq = 0
 
 rep_count = 0
 frame_count = 0
@@ -78,6 +79,12 @@ keypoint_names = [
     "left_ankle",
     "right_ankle",
 ]
+
+# Create a plot figure 
+fig, ax = plt.subplots()
+plt.ion()  # Enable interactive mode
+
+
 ####################
 # Functions
 def linear_regression(keypoint_name_list):
@@ -138,10 +145,21 @@ def backwards_difference(current_frame, dictionary_name):
     m_prime = (dictionary_name[current_frame] - dictionary_name[past_frame] ) / h
     return m_prime
 
-# Open the webcam
-cap = cv2.VideoCapture(0)
+####################
+# Select Input source
 
+# Webcam
+# cap = cv2.VideoCapture(0)
 
+# Video
+video_name = "pushups.mp4"
+cap = cv2.VideoCapture(f"videos\{video_name}")
+
+# slow down the video
+cap.set(cv2.CAP_PROP_FPS, 5)
+
+####################
+# Main Loop
 while cap.isOpened():
     frame_count += 1
     success, frame = cap.read()
@@ -164,11 +182,12 @@ while cap.isOpened():
            
         # Check if all of the shoulder, hip, knee, and ankle keypoints can be seen and have a high probability
         probability_threshold = 0.3
-        required_keypoints_right = [ "right_hip", "right_shoulder", "right_knee", "right_ankle"] #Included here for distinction R vs L
+        # required_keypoints_left = [ "left_hip", "left_shoulder", "left_ankle"] 
+        required_keypoints_right = ["right_ankle", "right_hip", "right_shoulder"]
         missing_keypoints = [] # Initialize / clear the list
 
         
-        # Dev Notes -> Need to add in 'Left' side of points
+
         for keypoint in required_keypoints_right:
             # Check to make sure the keypoint exists and has a high probability
             if keypoint not in keypoint_dict or keypoint_dict[keypoint]["probability"] < probability_threshold:
@@ -185,14 +204,11 @@ while cap.isOpened():
         
         else:
             m, b, r_sq = linear_regression(required_keypoints_right)
-
-            sig_fig = 5 # Set a sig fig value for the print statements to reduce size
-            m = round(m, sig_fig)
-            b = round(b, sig_fig)
-            r_sq = round(r_sq, sig_fig)
+            m_plot = m # Save the slope value for plotting
+            m = abs(m) # Take the absolute value of the slope left / right should not matter
 
             # Add a filter to remove slope outliers such as standing, sitting, etc.
-            slope_tolerance = 0.3
+            slope_tolerance = 0.5
             if m < slope_tolerance and m > -slope_tolerance:
                 # Add slope value at fame count to dictionary
                 slope_dict[frame_count] = m
@@ -222,7 +238,7 @@ while cap.isOpened():
         # Check if the slope is within the tolerance
         if slope_double_prime_dict[frame_count] <= state_tolerance:
             if slope_double_prime_dict[frame_count] >= -state_tolerance:
-                rep_count += 1
+                
                 if state == 'down':
                     state = 'up'
                 if state == 'up':
@@ -232,7 +248,11 @@ while cap.isOpened():
     
         ############################
         # Display Settings
-
+        sig_fig = 3 # Set a sig fig value for the print statements to reduce size
+        m = round(m, sig_fig)
+        b = round(b, sig_fig)
+        r_sq = round(r_sq, sig_fig)
+        
         # Calculate the center point of the frame
         height, width, _ = frame.shape
         center_height = height // 2
@@ -289,12 +309,12 @@ while cap.isOpened():
         )
 
         # Display the line of best fit over the image of the body and keypoints (y = mx + b)
-        if m is not None and b is not None:
+        if m_plot is not null and b is not null:
             if r_sq > 0.8:
                 cv2.line(
                     pose_annotated_frame,
                     (0, int(b)),
-                    (width, int(m * width + b)),
+                    (width, int(m_plot * width + b)),
                     (0, 192, 0),
                     2,
                 )
@@ -302,57 +322,92 @@ while cap.isOpened():
                 cv2.line(
                     pose_annotated_frame,
                     (0, int(b)),
-                    (width, int(m * width + b)),
+                    (width, int(m_plot * width + b)),
                     (0, 0, 255),
                     2,
                 )
 
         # If the state is 'up' then tint the image blue
-        if state == 'up':
-            pose_annotated_frame = cv2.applyColorMap(pose_annotated_frame, cv2.COLORMAP_WINTER)
+        # if state == 'up':
+        # pose_annotated_frame = cv2.applyColorMap(pose_annotated_frame, cv2.COLORMAP_WINTER)
             
         
-        
+
+
         # Expand the image to fit the screen
-        pose_annotated_frame = cv2.resize(pose_annotated_frame, (1000, 800))
+        # pose_annotated_frame = cv2.resize(pose_annotated_frame, (1000, 800))
+
+        # Take thesize of the video imput and scale it up on screen
+        pose_annotated_frame = cv2.resize(pose_annotated_frame, (width * 2, height * 2))
 
         # Display the frame
         cv2.imshow("Pose Detection", pose_annotated_frame)
 
-        # Press "q" to quit
+
+        ############################
+        # Real time plotting
+
+        # After the loop, you have a dictionary of {frame: value} pairs that you can plot
+        frame, slope = zip(*slope_dict.items())
+        frame, slope_prime = zip(*slope_prime_dict.items())
+        frame, slope_double_prime = zip(*slope_double_prime_dict.items())
+
+        # update the plot in real time
+        if frame_count % 1 == 0:  # update the plot every 10 frames, adjust as needed
+            # Clear the plot
+            ax.clear()
+            
+            # Plot both the values of the slope and its derivative in different colors
+            ax.plot(list(slope_dict.keys()), list(slope_dict.values()), color="blue")
+            # ax.plot(list(slope_prime_dict.keys()), list(slope_prime_dict.values()), color="red")
+            ax.plot(list(slope_double_prime_dict.keys()), list(slope_double_prime_dict.values()), color="green")
+            
+            plt.xlabel("Frame (n)")
+            plt.title("m Blue, m' Red, m'' Green")
+            plt.axhline(y=0, color="black", linestyle="--")
+            
+            plt.draw()
+            plt.pause(0.01)  # Add a short delay to allow the plot to update
+
+
+        # Press "q" to quit video
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
+         
+    
     
     else:
         break
 
-    
+
 
 # Release the webcam
 cap.release()
+
 # Close all windows
 cv2.destroyAllWindows()
 
 
 
-# After the loop, you have a dictionary of {frame: value} pairs that you can plot
-frame, slope = zip(*slope_dict.items())
-frame, slope_prime = zip(*slope_prime_dict.items())
-frame, slope_double_prime = zip(*slope_double_prime_dict.items())
+# # After the loop, you have a dictionary of {frame: value} pairs that you can plot
+# frame, slope = zip(*slope_dict.items())
+# frame, slope_prime = zip(*slope_prime_dict.items())
+# frame, slope_double_prime = zip(*slope_double_prime_dict.items())
 
-# Plot both the values of the slope and its derivative in differnet colors
-plt.plot(frame, slope, color="blue")
-plt.plot(frame, slope_prime, color="red")
-plt.plot(frame, slope_double_prime, color="green")
+# # Plot both the values of the slope and its derivative in differnet colors
+# plt.plot(frame, slope, color="blue")
+# plt.plot(frame, slope_prime, color="red")
+# plt.plot(frame, slope_double_prime, color="green")
 
-plt.xlabel("Frame (n)")
-plt.title("m Blue, m' Red, m'' Green")
+# plt.xlabel("Frame (n)")
+# plt.title("m Blue, m' Red, m'' Green")
 
-# Display a line at 0 for reference
-plt.axhline(y=0, color="black", linestyle="--")
+# # Display a line at 0 for reference
+# plt.axhline(y=0, color="black", linestyle="--")
 
-plt.show()
-
-
+# plt.show()
 
 
+
+plt.ioff()  # Disable interactive mode
+plt.show()  # Display the final plot
