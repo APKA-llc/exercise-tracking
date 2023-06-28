@@ -131,19 +131,21 @@ def linear_regression(keypoint_name_list):
     return slope, intercept , r_squared
 
 def backwards_difference(current_frame, dictionary_name):
-    ############################
     # This function uses the current slope and the last available slope from n th frame back to calculate the derivative at the current frame
     # Input: frame count, y value
     # Output: write to slope_prime_dict with the derivative ate current frame count
-    
+
     # Step size between current frame and last frame with a slope
     past_frame = current_frame -1
-    while dictionary_name[past_frame] == np.nan:
+    while past_frame not in dictionary_name or dictionary_name[past_frame] == np.nan:
         past_frame -= 1
+        if past_frame < 0:  # If past_frame goes beyond the starting index, break the loop
+            return np.nan
     h = current_frame - past_frame
     # Backwards difference method formula
     m_prime = (dictionary_name[current_frame] - dictionary_name[past_frame] ) / h
     return m_prime
+
 
 ####################
 # Select Input source
@@ -182,11 +184,11 @@ while cap.isOpened():
            
         # Check if all of the shoulder, hip, knee, and ankle keypoints can be seen and have a high probability
         probability_threshold = 0.3
-        # required_keypoints_left = [ "left_hip", "left_shoulder", "left_ankle"] 
-        required_keypoints_right = ["right_ankle", "right_hip", "right_shoulder"]
-        missing_keypoints = [] # Initialize / clear the list
 
-        
+        required_keypoints_right = ["right_hip", "right_shoulder"]
+        required_keypoints_lower = ["right_ankle", "right_knee"]
+
+        missing_keypoints = [] # Initialize / clear the list
 
         for keypoint in required_keypoints_right:
             # Check to make sure the keypoint exists and has a high probability
@@ -195,38 +197,49 @@ while cap.isOpened():
 
         if missing_keypoints != []:
             print(f"Not all keypoints are visible: {missing_keypoints}") #Debug statement
-            
+
             # No m value found for this frame
             null = np.nan
             slope_dict[frame_count] = null 
             slope_prime_dict[frame_count] = null
             slope_double_prime_dict[frame_count] = null
-        
         else:
-            m, b, r_sq = linear_regression(required_keypoints_right)
-            m_plot = m # Save the slope value for plotting
-            m = abs(m) # Take the absolute value of the slope left / right should not matter
-
-            # Add a filter to remove slope outliers such as standing, sitting, etc.
-            slope_tolerance = 0.5
-            if m < slope_tolerance and m > -slope_tolerance:
-                # Add slope value at fame count to dictionary
-                slope_dict[frame_count] = m
-
-                # Calculate the derivative at the current frame Write to slope_prime_dict
-                slope_prime_dict[frame_count] = backwards_difference(frame_count, slope_dict)
-
-                # Calculate the second derivative at the current frame 
-                slope_double_prime_dict[frame_count] = backwards_difference(frame_count, slope_prime_dict)
-
-                print(f"m: {m}, b: {b}, r_sq: {r_sq}")
-            
+            if "right_ankle" in keypoint_dict and keypoint_dict["right_ankle"]["probability"] >= probability_threshold:
+                # proceed with calculations using the right ankle
+                m, b, r_sq = linear_regression(required_keypoints_right + ["right_ankle"])
+            elif "right_knee" in keypoint_dict and keypoint_dict["right_knee"]["probability"] >= probability_threshold:
+                # proceed with calculations using the right knee
+                m, b, r_sq = linear_regression(required_keypoints_right + ["right_knee"])
             else:
                 # No m value found for this frame
                 null = np.nan
-                slope_dict[frame_count] = null
+                slope_dict[frame_count] = null 
                 slope_prime_dict[frame_count] = null
                 slope_double_prime_dict[frame_count] = null
+                print("Neither right ankle nor right knee keypoints are visible with a sufficient probability.")
+
+        m_plot = m # Save the slope value for plotting
+        m = abs(m) # Take the absolute value of the slope left / right should not matter
+
+        # Add a filter to remove slope outliers such as standing, sitting, etc.
+        slope_tolerance = 0.5
+        if m < slope_tolerance and m > -slope_tolerance:
+            # Add slope value at fame count to dictionary
+            slope_dict[frame_count] = m
+
+            # Calculate the derivative at the current frame Write to slope_prime_dict
+            slope_prime_dict[frame_count] = backwards_difference(frame_count, slope_dict)
+
+            # Calculate the second derivative at the current frame 
+            slope_double_prime_dict[frame_count] = backwards_difference(frame_count, slope_prime_dict)
+
+            print(f"m: {m}, b: {b}, r_sq: {r_sq}")
+        else:
+            # No m value found for this frame
+            null = np.nan
+            slope_dict[frame_count] = null 
+            slope_prime_dict[frame_count] = null
+            slope_double_prime_dict[frame_count] = null
 
 
         ############################
@@ -375,7 +388,6 @@ while cap.isOpened():
             break
          
     
-    
     else:
         break
 
@@ -406,7 +418,6 @@ cv2.destroyAllWindows()
 # plt.axhline(y=0, color="black", linestyle="--")
 
 # plt.show()
-
 
 
 plt.ioff()  # Disable interactive mode
