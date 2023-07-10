@@ -57,6 +57,7 @@ frame_count = 0
 
 slope_dict = {}
 slope_prime_dict = {}
+slope_emas_dict = {}
 slope_double_prime_dict = {}
 
 # Keypoint names
@@ -147,6 +148,26 @@ def backwards_difference(current_frame, dictionary_name):
     return m_prime
 
 
+def ema_filter(dict_name):
+    # This function takes a dictionary of frame numbers and values and applies an exponential moving average filter to the data
+    alpha = 0.1 # Smoothing factor 
+    ema_value = None
+    ema_values = {}
+
+    for frame_number, value in sorted(dict_name.items()):
+        if np.isnan(value): # Skip the frame if there's no reading
+            ema_values[frame_number] = np.nan
+            continue
+
+        if ema_value is None: # Initialize the EMA value for the first valid frame
+            ema_value = value
+        else: # Compute the EMA
+            ema_value = alpha * value + (1 - alpha) * ema_value
+
+        ema_values[frame_number] = ema_value
+
+    return ema_values
+
 ####################
 # Select Input source
 
@@ -201,6 +222,7 @@ while cap.isOpened():
             # No m value found for this frame
             null = np.nan
             slope_dict[frame_count] = null 
+            slope_emas_dict[frame_count] = null
             slope_prime_dict[frame_count] = null
             slope_double_prime_dict[frame_count] = null
         else:
@@ -214,6 +236,7 @@ while cap.isOpened():
                 # No m value found for this frame
                 null = np.nan
                 slope_dict[frame_count] = null 
+                slope_emas_dict[frame_count] = null
                 slope_prime_dict[frame_count] = null
                 slope_double_prime_dict[frame_count] = null
                 print("Neither right ankle nor right knee keypoints are visible with a sufficient probability.")
@@ -227,8 +250,10 @@ while cap.isOpened():
             # Add slope value at fame count to dictionary
             slope_dict[frame_count] = m
 
+            slope_emas_dict[frame_count] = ema_filter(slope_dict)[frame_count]
+
             # Calculate the derivative at the current frame Write to slope_prime_dict
-            slope_prime_dict[frame_count] = backwards_difference(frame_count, slope_dict)
+            slope_prime_dict[frame_count] = backwards_difference(frame_count, slope_emas_dict)
 
             # Calculate the second derivative at the current frame 
             slope_double_prime_dict[frame_count] = backwards_difference(frame_count, slope_prime_dict)
@@ -248,14 +273,14 @@ while cap.isOpened():
         state_tolerance = 0.1
         state = 'down' # state can be 'down' or 'up'
         
-        # Check if the slope is within the tolerance
-        if slope_double_prime_dict[frame_count] <= state_tolerance:
-            if slope_double_prime_dict[frame_count] >= -state_tolerance:
+        # # Check if the slope is within the tolerance
+        # if slope_double_prime_dict[frame_count] <= state_tolerance:
+        #     if slope_double_prime_dict[frame_count] >= -state_tolerance:
                 
-                if state == 'down':
-                    state = 'up'
-                if state == 'up':
-                    state = 'down'
+        #         if state == 'down':
+        #             state = 'up'
+        #         if state == 'up':
+        #             state = 'down'
 
 
     
@@ -362,7 +387,8 @@ while cap.isOpened():
 
         # After the loop, you have a dictionary of {frame: value} pairs that you can plot
         frame, slope = zip(*slope_dict.items())
-        frame, slope_prime = zip(*slope_prime_dict.items())
+        frame, slope_emas = zip(*slope_emas_dict.items())
+        #frame, slope_prime = zip(*slope_prime_dict.items())
         frame, slope_double_prime = zip(*slope_double_prime_dict.items())
 
         # update the plot in real time
@@ -371,12 +397,13 @@ while cap.isOpened():
             ax.clear()
             
             # Plot both the values of the slope and its derivative in different colors
-            ax.plot(list(slope_dict.keys()), list(slope_dict.values()), color="blue")
+            # ax.plot(list(slope_dict.keys()), list(slope_dict.values()), color="blue")
+            ax.plot(list(slope_emas_dict.keys()), list(slope_emas_dict.values()), color="orange")
             # ax.plot(list(slope_prime_dict.keys()), list(slope_prime_dict.values()), color="red")
             ax.plot(list(slope_double_prime_dict.keys()), list(slope_double_prime_dict.values()), color="green")
             
             plt.xlabel("Frame (n)")
-            plt.title("m Blue, m' Red, m'' Green")
+            #plt.title("m Blue, m' Red, m'' Green")
             plt.axhline(y=0, color="black", linestyle="--")
             
             plt.draw()
@@ -398,8 +425,6 @@ cap.release()
 
 # Close all windows
 cv2.destroyAllWindows()
-
-
 
 # # After the loop, you have a dictionary of {frame: value} pairs that you can plot
 # frame, slope = zip(*slope_dict.items())
