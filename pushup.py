@@ -21,6 +21,9 @@
 # issue with frame rate sampleing
 # computationally expensive
 
+# Possible solution 3: 
+# Peak detection algoritum
+
 
 #############################
 # Feature : Improvement sugesstions
@@ -28,10 +31,7 @@
 # Find residual for each point against the linear regression line, check if outlier, print advice 
 
 
-#############################
-# Feature : Rep counting
-#  needs a slope 'filter' to only look at a range of slopes for when you are standing , vs when you are doing a pushup
-# A 'score' that tells you how many good reps vs total reps
+
 
 
 #############################
@@ -39,7 +39,10 @@
 import cv2
 from ultralytics import YOLO
 import numpy as np
+from scipy.signal import find_peaks
 import matplotlib.pyplot as plt
+import time
+
 
 # Load Model
 pose_model = YOLO("yolov8s-pose.pt")
@@ -56,9 +59,8 @@ rep_count = 0
 frame_count = 0
 
 slope_dict = {}
-slope_prime_dict = {}
 slope_emas_dict = {}
-slope_double_prime_dict = {}
+
 
 # Keypoint names
 keypoint_names = [
@@ -131,23 +133,6 @@ def linear_regression(keypoint_name_list):
 
     return slope, intercept , r_squared
 
-def backwards_difference(current_frame, dictionary_name):
-    # This function uses the current slope and the last available slope from n th frame back to calculate the derivative at the current frame
-    # Input: frame count, y value
-    # Output: write to slope_prime_dict with the derivative ate current frame count
-
-    # Step size between current frame and last frame with a slope
-    past_frame = current_frame -1
-    while past_frame not in dictionary_name or dictionary_name[past_frame] == np.nan:
-        past_frame -= 1
-        if past_frame < 0:  # If past_frame goes beyond the starting index, break the loop
-            return np.nan
-    h = current_frame - past_frame
-    # Backwards difference method formula
-    m_prime = (dictionary_name[current_frame] - dictionary_name[past_frame] ) / h
-    return m_prime
-
-
 def ema_filter(dict_name):
     # This function takes a dictionary of frame numbers and values and applies an exponential moving average filter to the data
     alpha = 0.1 # Smoothing factor 
@@ -173,13 +158,13 @@ def ema_filter(dict_name):
 
 # Webcam
 # cap = cv2.VideoCapture(0)
-
 # Video
 video_name = "pushups.mp4"
 cap = cv2.VideoCapture(f"videos\{video_name}")
 
+
 # slow down the video
-cap.set(cv2.CAP_PROP_FPS, 5)
+#cap.set(cv2.CAP_PROP_FPS, 5)
 
 ####################
 # Main Loop
@@ -217,14 +202,13 @@ while cap.isOpened():
                 missing_keypoints.append(keypoint)
 
         if missing_keypoints != []:
-            print(f"Not all keypoints are visible: {missing_keypoints}") #Debug statement
+            print(f"Not all keypoints are visible: {missing_keypoints}") 
 
             # No m value found for this frame
             null = np.nan
             slope_dict[frame_count] = null 
             slope_emas_dict[frame_count] = null
-            slope_prime_dict[frame_count] = null
-            slope_double_prime_dict[frame_count] = null
+          
         else:
             if "right_ankle" in keypoint_dict and keypoint_dict["right_ankle"]["probability"] >= probability_threshold:
                 # proceed with calculations using the right ankle
@@ -237,8 +221,6 @@ while cap.isOpened():
                 null = np.nan
                 slope_dict[frame_count] = null 
                 slope_emas_dict[frame_count] = null
-                slope_prime_dict[frame_count] = null
-                slope_double_prime_dict[frame_count] = null
                 print("Neither right ankle nor right knee keypoints are visible with a sufficient probability.")
 
         m_plot = m # Save the slope value for plotting
@@ -249,40 +231,45 @@ while cap.isOpened():
         if m < slope_tolerance and m > -slope_tolerance:
             # Add slope value at fame count to dictionary
             slope_dict[frame_count] = m
-
             slope_emas_dict[frame_count] = ema_filter(slope_dict)[frame_count]
-
-            # Calculate the derivative at the current frame Write to slope_prime_dict
-            slope_prime_dict[frame_count] = backwards_difference(frame_count, slope_emas_dict)
-
-            # Calculate the second derivative at the current frame 
-            slope_double_prime_dict[frame_count] = backwards_difference(frame_count, slope_prime_dict)
-
-            print(f"m: {m}, b: {b}, r_sq: {r_sq}")
+            #print(f"m: {m}, b: {b}, r_sq: {r_sq}")
         else:
             # No m value found for this frame
             null = np.nan
             slope_dict[frame_count] = null 
-            slope_prime_dict[frame_count] = null
-            slope_double_prime_dict[frame_count] = null
 
 
-        ############################
-        #Implementation of k-states
+        #############################
+        # Feature : Rep counting
+    
 
-        state_tolerance = 0.1
-        state = 'down' # state can be 'down' or 'up'
+        # Uses the find_peaks function on the slope ema values to find if the current value is a peak then update the rep counter by 1
+
+        # Dict -> List -> Np Array
+        slope_emas_dict_ordered = dict(sorted(slope_emas_dict.items()))
+        slope_peak_list = list(slope_emas_dict_ordered.values())
+        slope_peak_array = np.array(slope_peak_list)
+
+        # Find if the current value is a peak or not
+        peaks , _ = find_peaks(slope_peak_array)
+
+        # if len(peaks) > peaks_old:
+        #     rep_count += 1
+
         
-        # # Check if the slope is within the tolerance
-        # if slope_double_prime_dict[frame_count] <= state_tolerance:
-        #     if slope_double_prime_dict[frame_count] >= -state_tolerance:
-                
-        #         if state == 'down':
-        #             state = 'up'
-        #         if state == 'up':
-        #             state = 'down'
+        # Print the list of peaks for debugging
+     
+        print(peaks)
 
+        #  If Slope Peak Found state = up
+        # If Slope Valley Found state = down
 
+        
+        #############################
+        # Feature : Accuracy Score
+        # A 'score' that tells you how many good reps vs total reps
+
+        
     
         ############################
         # Display Settings
@@ -298,37 +285,37 @@ while cap.isOpened():
 
         pose_annotated_frame = person.plot()
            
-        # Display the adherance to the line (r_sq)
-        text = "Back Straightness: {}".format(r_sq) 
-        text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
-        text_x = center_width - text_size[0] // 2
-        text_y = center_height - text_size[1] // 2
-        cv2.putText(
-            pose_annotated_frame,
-            text,
-            (text_x, text_y),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1,
-            (0, 0, 0),
-            2,
-            cv2.LINE_AA,
-        )
+        # # Display the adherance to the line (r_sq)
+        # text = "Back Straightness: {}".format(r_sq) 
+        # text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
+        # text_x = center_width - text_size[0] // 2
+        # text_y = center_height - text_size[1] // 2
+        # cv2.putText(
+        #     pose_annotated_frame,
+        #     text,
+        #     (text_x, text_y),
+        #     cv2.FONT_HERSHEY_SIMPLEX,
+        #     1,
+        #     (0, 0, 0),
+        #     2,
+        #     cv2.LINE_AA,
+        # )
 
-        # Display the slop of the back line (m)
-        text = "Back Angle: {}".format(m)
-        text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
-        text_x = (center_width - text_size[0] // 2)
-        text_y = (center_height - text_size[1] // 2) - 30
-        cv2.putText(
-            pose_annotated_frame,
-            text,
-            (text_x, text_y),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1,
-            (0, 0, 0),
-            2,
-            cv2.LINE_AA,
-        )
+        # # Display the slop of the back line (m)
+        # text = "Back Angle: {}".format(m)
+        # text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
+        # text_x = (center_width - text_size[0] // 2)
+        # text_y = (center_height - text_size[1] // 2) - 30
+        # cv2.putText(
+        #     pose_annotated_frame,
+        #     text,
+        #     (text_x, text_y),
+        #     cv2.FONT_HERSHEY_SIMPLEX,
+        #     1,
+        #     (0, 0, 0),
+        #     2,
+        #     cv2.LINE_AA,
+        # )
 
         # Display the slop of the back line (m)
         text = "Rep Counter: {}".format(rep_count)
@@ -375,7 +362,7 @@ while cap.isOpened():
         # Expand the image to fit the screen
         # pose_annotated_frame = cv2.resize(pose_annotated_frame, (1000, 800))
 
-        # Take thesize of the video imput and scale it up on screen
+        # Take the size of the video imput and scale it up on screen
         pose_annotated_frame = cv2.resize(pose_annotated_frame, (width * 2, height * 2))
 
         # Display the frame
@@ -388,8 +375,7 @@ while cap.isOpened():
         # After the loop, you have a dictionary of {frame: value} pairs that you can plot
         frame, slope = zip(*slope_dict.items())
         frame, slope_emas = zip(*slope_emas_dict.items())
-        #frame, slope_prime = zip(*slope_prime_dict.items())
-        frame, slope_double_prime = zip(*slope_double_prime_dict.items())
+
 
         # update the plot in real time
         if frame_count % 1 == 0:  # update the plot every 10 frames, adjust as needed
@@ -399,9 +385,12 @@ while cap.isOpened():
             # Plot both the values of the slope and its derivative in different colors
             # ax.plot(list(slope_dict.keys()), list(slope_dict.values()), color="blue")
             ax.plot(list(slope_emas_dict.keys()), list(slope_emas_dict.values()), color="orange")
-            # ax.plot(list(slope_prime_dict.keys()), list(slope_prime_dict.values()), color="red")
-            ax.plot(list(slope_double_prime_dict.keys()), list(slope_double_prime_dict.values()), color="green")
             
+            # Plot the peaks as red vertical lines
+            ax.vlines(peaks, ymin=-1, ymax=1, color="red")
+
+            ############################
+            # Pretty Plot settings
             plt.xlabel("Frame (n)")
             #plt.title("m Blue, m' Red, m'' Green")
             plt.axhline(y=0, color="black", linestyle="--")
@@ -412,12 +401,9 @@ while cap.isOpened():
 
         # Press "q" to quit video
         if cv2.waitKey(1) & 0xFF == ord("q"):
-            break
-         
-    
+            break  
     else:
         break
-
 
 
 # Release the webcam
@@ -426,24 +412,9 @@ cap.release()
 # Close all windows
 cv2.destroyAllWindows()
 
-# # After the loop, you have a dictionary of {frame: value} pairs that you can plot
-# frame, slope = zip(*slope_dict.items())
-# frame, slope_prime = zip(*slope_prime_dict.items())
-# frame, slope_double_prime = zip(*slope_double_prime_dict.items())
+# Wait 1 second
+time.sleep(1)
 
-# # Plot both the values of the slope and its derivative in differnet colors
-# plt.plot(frame, slope, color="blue")
-# plt.plot(frame, slope_prime, color="red")
-# plt.plot(frame, slope_double_prime, color="green")
-
-# plt.xlabel("Frame (n)")
-# plt.title("m Blue, m' Red, m'' Green")
-
-# # Display a line at 0 for reference
-# plt.axhline(y=0, color="black", linestyle="--")
-
-# plt.show()
-
-
+# Plot the final graph
 plt.ioff()  # Disable interactive mode
 plt.show()  # Display the final plot
