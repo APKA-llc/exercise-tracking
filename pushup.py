@@ -57,6 +57,7 @@ r_sq = 0
 
 rep_count = 0
 frame_count = 0
+old_num_peaks = 0
 
 slope_dict = {}
 slope_emas_dict = {}
@@ -135,7 +136,7 @@ def linear_regression(keypoint_name_list):
 
 def ema_filter(dict_name):
     # This function takes a dictionary of frame numbers and values and applies an exponential moving average filter to the data
-    alpha = 0.1 # Smoothing factor 
+    alpha = 0.5 # Smoothing factor 
     ema_value = None
     ema_values = {}
 
@@ -246,31 +247,25 @@ while cap.isOpened():
         # Uses the find_peaks function on the slope ema values to find if the current value is a peak then update the rep counter by 1
 
         # Dict -> List -> Np Array
-        slope_emas_dict_ordered = dict(sorted(slope_emas_dict.items()))
-        slope_peak_list = list(slope_emas_dict_ordered.values())
+
+        slope_peak_list = list(slope_emas_dict.values())
         slope_peak_array = np.array(slope_peak_list)
 
         # Find if the current value is a peak or not
-        peaks , _ = find_peaks(slope_peak_array)
+        peaks , _ = find_peaks(slope_peak_array, prominence=0.1)
+        num_peaks = len(peaks)
 
-        # if len(peaks) > peaks_old:
-        #     rep_count += 1
+        # If a slope peak found then update the rep counter by 1
+        if num_peaks > old_num_peaks:
+            rep_count += 1
+    
+        # Update the old peak count length
+        old_num_peaks = len(peaks)
 
-        
-        # Print the list of peaks for debugging
-     
+        #Print for debugging
         print(peaks)
 
-        #  If Slope Peak Found state = up
-        # If Slope Valley Found state = down
 
-        
-        #############################
-        # Feature : Accuracy Score
-        # A 'score' that tells you how many good reps vs total reps
-
-        
-    
         ############################
         # Display Settings
         sig_fig = 3 # Set a sig fig value for the print statements to reduce size
@@ -374,8 +369,11 @@ while cap.isOpened():
 
         # After the loop, you have a dictionary of {frame: value} pairs that you can plot
         frame, slope = zip(*slope_dict.items())
-        frame, slope_emas = zip(*slope_emas_dict.items())
-
+      
+        if slope_emas_dict:  # checks if the dictionary is not empty
+         frame, slope_emas = zip(*slope_emas_dict.items())
+        else:
+          print("The slope_emas_dict is empty.")
 
         # update the plot in real time
         if frame_count % 1 == 0:  # update the plot every 10 frames, adjust as needed
