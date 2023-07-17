@@ -2,38 +2,6 @@
 # 6-16-2023
 # The purpose of this program is to count the number of pushups as well as correct user form.
 
-
-#############################
-# Feature : Need to find the start/mid/end ( find a robust way to solve this problem will save us a lot of time )
-
-# Possilbe solution 1: Angle measures for the arms
-#
-# Limitations: 
-# need to keep track of extra limbs
-
-
-# Possilbe solution 2: Derivative of the linear regression line slope (m)
-# 
-# Research: numerical forward difference method of taking the derivative
-#
-# Limitations: 
-# need to keep track of time
-# issue with frame rate sampleing
-# computationally expensive
-
-# Possible solution 3: 
-# Peak detection algoritum
-
-
-#############################
-# Feature : Improvement sugesstions
-#
-# Find residual for each point against the linear regression line, check if outlier, print advice 
-
-
-
-
-
 #############################
 # Import libraries
 import cv2
@@ -44,12 +12,11 @@ import matplotlib.pyplot as plt
 import time
 
 
-# Load Model
-pose_model = YOLO("yolov8s-pose.pt")
-
-
 ####################
 # Initialize
+
+pose_model = YOLO("yolov8s-pose.pt")
+
 m_plot=0
 m = 0
 b = 0
@@ -87,6 +54,7 @@ keypoint_names = [
 # Create a plot figure 
 fig, ax = plt.subplots()
 plt.ion()  # Enable interactive mode
+
 
 
 ####################
@@ -136,7 +104,7 @@ def linear_regression(keypoint_name_list):
 
 def ema_filter(dict_name):
     # This function takes a dictionary of frame numbers and values and applies an exponential moving average filter to the data
-    alpha = 0.5 # Smoothing factor 
+    alpha = 0.3 # Smoothing factor 
     ema_value = None
     ema_values = {}
 
@@ -154,18 +122,29 @@ def ema_filter(dict_name):
 
     return ema_values
 
+
 ####################
-# Select Input source
+# CV Video Capture Settings
 
 # Webcam
 # cap = cv2.VideoCapture(0)
+
 # Video
 video_name = "pushups.mp4"
+
+# Open the video file
 cap = cv2.VideoCapture(f"videos\{video_name}")
-
-
 # slow down the video
 #cap.set(cv2.CAP_PROP_FPS, 5)
+
+
+# get dimensions of the original frame
+ret , frame = cap.read()
+height, width, channels = frame.shape
+
+# Define new height
+new_height = height + 100  # increase height by 100 pixels for the bar
+
 
 ####################
 # Main Loop
@@ -242,10 +221,7 @@ while cap.isOpened():
 
         #############################
         # Feature : Rep counting
-    
-
         # Uses the find_peaks function on the slope ema values to find if the current value is a peak then update the rep counter by 1
-
         # Dict -> List -> Np Array
 
         slope_peak_list = list(slope_emas_dict.values())
@@ -253,17 +229,21 @@ while cap.isOpened():
 
         # Find if the current value is a peak or not
         peaks , _ = find_peaks(slope_peak_array, prominence=0.1)
+        
+        # Add an offset correction number to every value in the peaks list
+        peaks = peaks + 3
+
         num_peaks = len(peaks)
 
         # If a slope peak found then update the rep counter by 1
         if num_peaks > old_num_peaks:
             rep_count += 1
+            print(f"Another Rep!")
     
         # Update the old peak count length
         old_num_peaks = len(peaks)
 
-        #Print for debugging
-        print(peaks)
+    
 
 
         ############################
@@ -278,53 +258,77 @@ while cap.isOpened():
         center_height = height // 2
         center_width = width // 2
 
+
+        ############################
         pose_annotated_frame = person.plot()
+
+        ############################
+        # CV Display Settings
+
+        # Create a new larger frame
+        new_frame = np.zeros((new_height, width, channels), dtype=np.uint8)
+
+        # Insert the original frame with pose annotations into the larger frame
+        new_frame[:height, :width] = pose_annotated_frame
+
+        # Draw the bar in the additional space
+        cv2.rectangle(new_frame, (0, height), (width, new_height), (33,33,33), -1)
+
+
+        # Green / Red Square for posture
+        x1 = int((width/2)+(0.1*width))
+        x2 = int((width/2)-(0.1*width))
+    
+        if r_sq > 0.8:
+            cv2.rectangle(new_frame, (x1, height), (x2, new_height), (12,231,12), -1)
+        else:
+            cv2.rectangle(new_frame, (x1, height), (x2, new_height), (12,12,231), -1)
+
            
-        # # Display the adherance to the line (r_sq)
-        # text = "Back Straightness: {}".format(r_sq) 
-        # text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
-        # text_x = center_width - text_size[0] // 2
-        # text_y = center_height - text_size[1] // 2
-        # cv2.putText(
-        #     pose_annotated_frame,
-        #     text,
-        #     (text_x, text_y),
-        #     cv2.FONT_HERSHEY_SIMPLEX,
-        #     1,
-        #     (0, 0, 0),
-        #     2,
-        #     cv2.LINE_AA,
-        # )
-
-        # # Display the slop of the back line (m)
-        # text = "Back Angle: {}".format(m)
-        # text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
-        # text_x = (center_width - text_size[0] // 2)
-        # text_y = (center_height - text_size[1] // 2) - 30
-        # cv2.putText(
-        #     pose_annotated_frame,
-        #     text,
-        #     (text_x, text_y),
-        #     cv2.FONT_HERSHEY_SIMPLEX,
-        #     1,
-        #     (0, 0, 0),
-        #     2,
-        #     cv2.LINE_AA,
-        # )
-
-        # Display the slop of the back line (m)
-        text = "Rep Counter: {}".format(rep_count)
+        # Display the adherance to the line (r_sq)
+        text = "Straightness: {}".format(r_sq) 
         text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
-        text_x = (center_width - text_size[0] // 2)
-        text_y = (center_height - text_size[1] // 2) - 60
+        text_x = x1 + 20
+        text_y = height + 40
         cv2.putText(
-            pose_annotated_frame,
+            new_frame,
             text,
             (text_x, text_y),
             cv2.FONT_HERSHEY_SIMPLEX,
             1,
-            (0, 0, 225),
-            3,
+            (255, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
+
+        # Display the slop of the back line (m)
+        text = "Angle: {}".format(m)
+        text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
+        text_x = x1 + 20
+        text_y = height + 80
+        cv2.putText(
+            new_frame,
+            text,
+            (text_x, text_y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (255, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
+
+        # Display the slop of the back line (m)
+        text = "Rep Counter: {}".format(rep_count)
+        text_x = 30
+        text_y = int(height + 60)
+        cv2.putText(
+            new_frame,
+            text,
+            (text_x, text_y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (255, 255, 255),
+            2,
             cv2.LINE_AA,
         )
 
@@ -332,7 +336,7 @@ while cap.isOpened():
         if m_plot is not null and b is not null:
             if r_sq > 0.8:
                 cv2.line(
-                    pose_annotated_frame,
+                    new_frame,
                     (0, int(b)),
                     (width, int(m_plot * width + b)),
                     (0, 192, 0),
@@ -340,61 +344,53 @@ while cap.isOpened():
                 )
             else:
                 cv2.line(
-                    pose_annotated_frame,
+                    new_frame,
                     (0, int(b)),
                     (width, int(m_plot * width + b)),
                     (0, 0, 255),
                     2,
                 )
 
-        # If the state is 'up' then tint the image blue
-        # if state == 'up':
-        # pose_annotated_frame = cv2.applyColorMap(pose_annotated_frame, cv2.COLORMAP_WINTER)
-            
-        
-
-
-        # Expand the image to fit the screen
-        # pose_annotated_frame = cv2.resize(pose_annotated_frame, (1000, 800))
 
         # Take the size of the video imput and scale it up on screen
-        pose_annotated_frame = cv2.resize(pose_annotated_frame, (width * 2, height * 2))
+        new_frame = cv2.resize(new_frame, (width * 3, height * 3))
 
         # Display the frame
-        cv2.imshow("Pose Detection", pose_annotated_frame)
+        cv2.imshow("Pose Detection", new_frame)
 
 
-        ############################
-        # Real time plotting
 
-        # After the loop, you have a dictionary of {frame: value} pairs that you can plot
-        frame, slope = zip(*slope_dict.items())
+        # ############################
+        # # Real time plotting
+
+        # # After the loop, you have a dictionary of {frame: value} pairs that you can plot
+        # # frame, slope = zip(*slope_dict.items())
       
-        if slope_emas_dict:  # checks if the dictionary is not empty
-         frame, slope_emas = zip(*slope_emas_dict.items())
-        else:
-          print("The slope_emas_dict is empty.")
+        # if slope_emas_dict:  # checks if the dictionary is not empty
+        #  frame, slope_emas = zip(*slope_emas_dict.items())
+        # else:
+        #   print("The slope_emas_dict is empty.")
 
-        # update the plot in real time
-        if frame_count % 1 == 0:  # update the plot every 10 frames, adjust as needed
-            # Clear the plot
-            ax.clear()
+        # # update the plot in real time
+        # if frame_count % 1 == 0:  # update the plot every 10 frames, adjust as needed
+        #     # Clear the plot
+        #     ax.clear()
             
-            # Plot both the values of the slope and its derivative in different colors
-            # ax.plot(list(slope_dict.keys()), list(slope_dict.values()), color="blue")
-            ax.plot(list(slope_emas_dict.keys()), list(slope_emas_dict.values()), color="orange")
+        #     # Plot both the values of the slope and its derivative in different colors
+        #     # ax.plot(list(slope_dict.keys()), list(slope_dict.values()), color="blue")
+        #     ax.plot(list(slope_emas_dict.keys()), list(slope_emas_dict.values()), color="orange")
             
-            # Plot the peaks as red vertical lines
-            ax.vlines(peaks, ymin=-1, ymax=1, color="red")
+        #     # Plot the peaks as red vertical lines
+        #     ax.vlines(peaks, ymin=0, ymax=1, color="red")
 
-            ############################
-            # Pretty Plot settings
-            plt.xlabel("Frame (n)")
-            #plt.title("m Blue, m' Red, m'' Green")
-            plt.axhline(y=0, color="black", linestyle="--")
+        #     ############################
+        #     # Pretty Plot settings
+        #     plt.xlabel("Frame (n)")
+        #     #plt.title("m Blue, m' Red, m'' Green")
+        #     plt.axhline(y=0, color="black", linestyle="--")
             
-            plt.draw()
-            plt.pause(0.01)  # Add a short delay to allow the plot to update
+        #     plt.draw()
+        #     plt.pause(0.01)  # Add a short delay to allow the plot to update
 
 
         # Press "q" to quit video
@@ -410,9 +406,9 @@ cap.release()
 # Close all windows
 cv2.destroyAllWindows()
 
-# Wait 1 second
-time.sleep(1)
+# # Wait 1 second
+# time.sleep(1)
 
-# Plot the final graph
-plt.ioff()  # Disable interactive mode
-plt.show()  # Display the final plot
+# # Plot the final graph
+# plt.ioff()  # Disable interactive mode
+# plt.show()  # Display the final plot
