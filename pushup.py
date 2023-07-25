@@ -1,5 +1,4 @@
-# Jake and Krish
-# 6-16-2023
+# Jacob Auman
 # The purpose of this program is to count the number of pushups as well as correct user form.
 
 #############################
@@ -15,8 +14,6 @@ import time
 ####################
 # Initialize
 
-pose_model = YOLO("yolov8s-pose.pt")
-
 m_plot=0
 m = 0
 b = 0
@@ -30,7 +27,9 @@ slope_dict = {}
 slope_emas_dict = {}
 
 
-# Keypoint names
+# Initialize the YOLO model
+pose_model = YOLO("yolov8s-pose.pt")
+
 keypoint_names = [
     "nose",
     "left_eye",
@@ -54,8 +53,6 @@ keypoint_names = [
 # Create a plot figure 
 fig, ax = plt.subplots()
 plt.ion()  # Enable interactive mode
-
-
 
 ####################
 # Functions
@@ -130,13 +127,12 @@ def ema_filter(dict_name):
 # cap = cv2.VideoCapture(0)
 
 # Video
-video_name = "pushups.mp4"
+video_name = "pushup3.mp4"
 
 # Open the video file
 cap = cv2.VideoCapture(f"videos\{video_name}")
 # slow down the video
 #cap.set(cv2.CAP_PROP_FPS, 5)
-
 
 # get dimensions of the original frame
 ret , frame = cap.read()
@@ -333,6 +329,7 @@ while cap.isOpened():
         )
 
         # Display the line of best fit over the image of the body and keypoints (y = mx + b)
+        null = np.nan
         if m_plot is not null and b is not null:
             if r_sq > 0.8:
                 cv2.line(
@@ -353,46 +350,13 @@ while cap.isOpened():
 
 
         # Take the size of the video imput and scale it up on screen
-        new_frame = cv2.resize(new_frame, (width * 3, height * 3))
+        new_frame = cv2.resize(new_frame, (width * 2, height * 2))
 
         # Display the frame
         cv2.imshow("Pose Detection", new_frame)
 
 
-
-        # ############################
-        # # Real time plotting
-
-        # # After the loop, you have a dictionary of {frame: value} pairs that you can plot
-        # # frame, slope = zip(*slope_dict.items())
-      
-        # if slope_emas_dict:  # checks if the dictionary is not empty
-        #  frame, slope_emas = zip(*slope_emas_dict.items())
-        # else:
-        #   print("The slope_emas_dict is empty.")
-
-        # # update the plot in real time
-        # if frame_count % 1 == 0:  # update the plot every 10 frames, adjust as needed
-        #     # Clear the plot
-        #     ax.clear()
-            
-        #     # Plot both the values of the slope and its derivative in different colors
-        #     # ax.plot(list(slope_dict.keys()), list(slope_dict.values()), color="blue")
-        #     ax.plot(list(slope_emas_dict.keys()), list(slope_emas_dict.values()), color="orange")
-            
-        #     # Plot the peaks as red vertical lines
-        #     ax.vlines(peaks, ymin=0, ymax=1, color="red")
-
-        #     ############################
-        #     # Pretty Plot settings
-        #     plt.xlabel("Frame (n)")
-        #     #plt.title("m Blue, m' Red, m'' Green")
-        #     plt.axhline(y=0, color="black", linestyle="--")
-            
-        #     plt.draw()
-        #     plt.pause(0.01)  # Add a short delay to allow the plot to update
-
-
+    
         # Press "q" to quit video
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break  
